@@ -1,0 +1,51 @@
+services:
+    app:
+        build:
+            context: 'docker'
+            dockerfile: Dockerfile
+            args:
+                WWWUSER: '${WWWUSER:-1000}'
+        image: 'tsuricast-app'
+        # machiiro-dev が 8081 / 5433 / 5173 を使うため、TsuriCast は 8082 / 5434 を既定にする
+        ports:
+            - '${APP_PORT:-8082}:80'
+        volumes:
+            - ./api:/var/www/html
+        networks:
+            - app
+        depends_on:
+            pgsql:
+                condition: service_healthy
+
+    pgsql:
+        image: 'postgres:16'
+        ports:
+            - '${FORWARD_DB_PORT:-5434}:5432'
+        environment:
+            POSTGRES_DB: '${DB_DATABASE:-tsuricast}'
+            POSTGRES_USER: '${DB_USERNAME:-tsuricast}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+        volumes:
+            - 'tsuricast-pgsql:/var/lib/postgresql/data'
+            - './docker/postgres/create-testing-database.sql:/docker-entrypoint-initdb.d/10-create-testing-database.sql'
+        networks:
+            - app
+        healthcheck:
+            test:
+                - CMD
+                - pg_isready
+                - '-q'
+                - '-d'
+                - '${DB_DATABASE:-tsuricast}'
+                - '-U'
+                - '${DB_USERNAME:-tsuricast}'
+            retries: 3
+            timeout: 5s
+
+networks:
+    app:
+        driver: bridge
+
+volumes:
+    tsuricast-pgsql:
+        driver: local
