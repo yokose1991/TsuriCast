@@ -18,25 +18,76 @@ tsuricast/
 
 Docker 構成は machiiro-dev と同方式（Amazon Linux 2023 ベースの1コンテナに nginx + PHP-FPM を supervisord で同居）。TsuriCast に不要な依存（Node / MeCab / ZBar / Python など）を除いたスリム版。
 
-## 開発環境の起動
+## 開発環境の構築
 
-```bash
-make up        # ビルド済みなら起動のみ（初回は make build が先）
-make migrate   # マイグレーション
-make test      # テスト（tsuricast_test DB を使用）
-make shell     # app コンテナに入る
-```
+前提: Docker Desktop / Node.js 20+（mobile 用）
 
 | 用途 | URL / ポート |
 |---|---|
 | API | http://localhost:8082 （machiiro-dev の 8081 と重複しないよう 8082） |
 | PostgreSQL | localhost:5434 （同じく 5433 を避けて 5434） |
 
-モバイル（Expo）:
+### 初回（clone 直後）
+
+```bash
+git clone https://github.com/yokose1991/TsuriCast.git tsuricast
+cd tsuricast
+make setup
+cd mobile && npm install
+```
+
+`make setup` は以下を順に実行する（冪等なので再実行しても安全。手動でやる場合も同じ順序）:
+
+```bash
+docker compose build                              # AL2023 イメージのビルド（初回は数分かかる）
+docker compose up -d                              # app + pgsql を起動
+docker compose exec app composer install          # PHP 依存を導入（vendor/ は git 管理外のため）
+cp api/.env.example api/.env                      # 環境設定（DB 接続は pgsql コンテナ向けの値が入っている）
+docker compose exec app php artisan key:generate  # APP_KEY を生成（未設定のときのみ）
+docker compose exec app php artisan migrate       # マイグレーション
+```
+
+http://localhost:8082/up が 200 を返せば構築完了。
+
+### 2回目以降
+
+```bash
+make up                        # 起動（DB データは volume に残っているのでこれだけ）
+cd mobile && npx expo start    # モバイルはこれだけ
+```
+
+以下は該当する変更を取り込んだときだけ:
+
+```bash
+make migrate                              # 新しいマイグレーションが増えたとき
+docker compose exec app composer install  # composer.json / composer.lock が変わったとき
+cd mobile && npm install                  # mobile/package.json が変わったとき
+make build && make up                     # Dockerfile や docker/ 配下が変わったとき
+```
+
+### 停止・リセット
+
+```bash
+make down                # 停止（DB データは volume に保持される）
+docker compose down -v   # DB データごと完全リセット（次回は make setup からやり直し）
+```
+
+### よく使うコマンド
+
+| コマンド | 内容 |
+|---|---|
+| `make up` / `make down` | 起動 / 停止 |
+| `make shell` | app コンテナに入る |
+| `make migrate` | マイグレーション |
+| `make fresh` | DB を作り直して seeder を投入 |
+| `make test` | PHPUnit（`tsuricast_test` DB を使用） |
+| `make lint` / `make format` | Pint によるコードスタイル確認 / 整形 |
+| `make pr-check` | lint + test（PR を出す前に実行） |
+
+### モバイル（Expo Go での実機確認）
 
 ```bash
 cd mobile
-npm install
 npx expo start   # 表示される QR コードを実機の Expo Go で読み取る
 ```
 

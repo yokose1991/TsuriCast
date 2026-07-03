@@ -1,4 +1,15 @@
-.PHONY: up down build shell migrate fresh test lint format pr-check
+.PHONY: setup up down build shell migrate fresh test lint format pr-check
+
+# 初回構築（clone 直後）。冪等なので再実行しても安全
+setup:
+	docker compose build
+	docker compose up -d
+	docker compose exec app composer install
+	@test -f api/.env || cp api/.env.example api/.env
+	@grep -q '^APP_KEY=base64' api/.env || docker compose exec app php artisan key:generate
+	docker compose exec app php artisan migrate
+	@echo "✅ Setup complete!"
+	@echo "📱 API: http://localhost:8082"
 
 up:
 	docker compose up -d
